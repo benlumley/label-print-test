@@ -177,48 +177,53 @@
             zpl: {
                 data: `^XA
 
-^FO50,30^A0N,40,40^FDLavandula angustifolia^FS
-^FO50,80^A0N,28,28^FDEnglish Lavender^FS
-^FO50,130^A0N,20,20^FDPerennial | Full Sun | Zone 5-9^FS
-^FO50,170^BQN,2,4^FDQA,https://example.com/plant/123^FS
+^FO20,15^A0N,36,36^FDAnemanthele lessoniana^FS
+^FO20,58^A0N,20,20^FDViriditas Studio   Qty: 6   T1   9 cm^FS
+^FO20,90^GB370,50,1^FS
+^FO25,94^A0N,16,16^FDUK Plant Passport^FS
+^FO25,114^A0N,14,14^FDA. Anemanthele lessoniana B. 121397 C. 006910 D. GB^FS
 
 ^XZ`,
                 note: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode."
             },
             tpcl: {
-                data: `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0050,0030,2,2,C,00,B\nLavandula angustifolia\r\n\x1BPC000;0050,0080,2,2,C,00,B\nEnglish Lavender\r\n\x1BPC000;0050,0130,1,1,C,00,B\nPerennial | Full Sun | Zone 5-9\r\n\x1BXS;0050,0170,05,03,01\nhttps://example.com/plant/123\r\n\x1BQ1\n\x1BZ\n`,
+                data: `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0020,0015,2,2,C,00,B\nAnemanthele lessoniana\r\n\x1BPC000;0020,0058,1,1,C,00,B\nViriditas Studio   Qty: 6   T1   9 cm\r\n\x1BLC;0020,0090,0390,0140,1,1\r\n\x1BPC000;0025,0094,1,1,C,00,B\nUK Plant Passport\r\n\x1BPC000;0025,0114,1,1,C,00,B\nA. Anemanthele lessoniana B. 121397 C. 006910 D. GB\r\n\x1BQ1\n\x1BZ\n`,
                 note: "Toshiba Printer Command Language. Native language for the SA4. Control characters are embedded directly."
             },
             epl: {
                 data: `N
 q812
 Q1218,24
-A50,30,0,4,1,1,N,"Lavandula angustifolia"
-A50,80,0,3,1,1,N,"English Lavender"
-A50,130,0,2,1,1,N,"Perennial | Full Sun | Zone 5-9"
-b50,170,Q,s4,"https://example.com/plant/123"
+A20,15,0,4,1,1,N,"Anemanthele lessoniana"
+A20,58,0,2,1,1,N,"Viriditas Studio   Qty: 6   T1   9 cm"
+X20,90,390,140,1
+A25,94,0,1,1,1,N,"UK Plant Passport"
+A25,114,0,1,1,1,N,"A. Anemanthele lessoniana B. 121397 C. 006910 D. GB"
 P1`,
                 note: "Eltron Programming Language. Used by older Zebra/Eltron printers."
             },
             tspl: {
-                data: `SIZE 100 mm, 60 mm
+                data: `SIZE 100 mm, 30 mm
 GAP 3 mm, 0
 CLS
-TEXT 50,30,"4",0,1,1,"Lavandula angustifolia"
-TEXT 50,80,"3",0,1,1,"English Lavender"
-TEXT 50,130,"2",0,1,1,"Perennial | Full Sun | Zone 5-9"
-QRCODE 50,170,L,4,A,0,"https://example.com/plant/123"
+TEXT 20,15,"4",0,1,1,"Anemanthele lessoniana"
+TEXT 20,58,"2",0,1,1,"Viriditas Studio   Qty: 6   T1   9 cm"
+BOX 20,90,390,140,1
+TEXT 25,94,"1",0,1,1,"UK Plant Passport"
+TEXT 25,114,"1",0,1,1,"A. Anemanthele lessoniana B. 121397 C. 006910 D. GB"
 PRINT 1`,
                 note: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers."
             },
             escpos: {
-                data: `\x1B@\x1Ba\x01\x1B!\x30Lavandula angustifolia\n\x1B!\x00\nEnglish Lavender\n\nPerennial | Full Sun | Zone 5-9\n\n\x1DV\x01`,
+                data: `\x1B@\x1Ba\x00\x1B!\x30Anemanthele lessoniana\n\x1B!\x00Viriditas Studio   Qty: 6   T1   9 cm\n\n--- UK Plant Passport ---\nA. Anemanthele lessoniana B. 121397 C. 006910 D. GB\n\n\x1DV\x01`,
                 note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it."
             },
             raw: {
-                data: `Lavandula angustifolia
-English Lavender
-Perennial | Full Sun | Zone 5-9`,
+                data: `Anemanthele lessoniana
+Viriditas Studio   Qty: 6   T1   9 cm
+
+UK Plant Passport
+A. Anemanthele lessoniana B. 121397 C. 006910 D. GB`,
                 note: "Plain text. Useful for testing connectivity — printer should print the raw text if it accepts it."
             }
         };
