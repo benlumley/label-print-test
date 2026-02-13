@@ -136,7 +136,7 @@ Perennial | Full Sun | Zone 5-9[CR][LF]
 https://example.com/plant/123[CR][LF]
 [ESC]Q1[LF]
 [ESC]Z[LF]`,
-                note: "Toshiba Printer Command Language. Native language for the SA4. Replace [ESC], [LF], [CR] with actual control characters (0x1B, 0x0A, 0x0D)."
+                note: "Toshiba Printer Command Language. Native language for the SA4. [ESC]/[LF]/[CR] are auto-converted to real control chars on send."
             },
             epl: {
                 data: `N
@@ -174,7 +174,7 @@ Perennial | Full Sun | Zone 5-9
 [GS]k0x31 0x02 0x04
 https://example.com/plant/123
 [GS]V1`,
-                note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it. Replace [ESC], [GS] with 0x1B, 0x1D."
+                note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it. [ESC]/[GS] are auto-converted on send."
             },
             raw: {
                 data: `Lavandula angustifolia
@@ -200,10 +200,41 @@ Perennial | Full Sun | Zone 5-9`,
             el.className = type;
         }
 
+        // Convert readable placeholders to actual control characters
+        function resolveControlChars(str) {
+            return str
+                .replace(/\[ESC\]/g, "\x1B")
+                .replace(/\[GS\]/g, "\x1D")
+                .replace(/\[FS\]/g, "\x1C")
+                .replace(/\[CR\]/g, "\r")
+                .replace(/\[LF\]/g, "\n")
+                .replace(/\[NUL\]/g, "\x00")
+                .replace(/\[SOH\]/g, "\x01")
+                .replace(/\[STX\]/g, "\x02")
+                .replace(/\[ETX\]/g, "\x03")
+                .replace(/\[EOT\]/g, "\x04")
+                .replace(/\[ENQ\]/g, "\x05")
+                .replace(/\[ACK\]/g, "\x06")
+                .replace(/\[BEL\]/g, "\x07")
+                .replace(/\[BS\]/g, "\x08")
+                .replace(/\[HT\]/g, "\x09")
+                .replace(/\[FF\]/g, "\x0C")
+                .replace(/\[SO\]/g, "\x0E")
+                .replace(/\[SI\]/g, "\x0F")
+                .replace(/\[DLE\]/g, "\x10")
+                .replace(/\[DC1\]/g, "\x11")
+                .replace(/\[DC2\]/g, "\x12")
+                .replace(/\[DC3\]/g, "\x13")
+                .replace(/\[DC4\]/g, "\x14")
+                .replace(/\[CAN\]/g, "\x18")
+                .replace(/\[RS\]/g, "\x1E")
+                .replace(/\[US\]/g, "\x1F");
+        }
+
         async function sendPrint() {
             const btn = document.getElementById("print-btn");
             const port = document.getElementById("port").value;
-            const data = document.getElementById("data").value;
+            const data = resolveControlChars(document.getElementById("data").value);
 
             btn.disabled = true;
             btn.textContent = "Sending...";
