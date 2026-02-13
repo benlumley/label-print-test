@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Label Printer Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -45,7 +46,6 @@
         }
         .row { display: flex; gap: 12px; }
         .row .field { flex: 1; }
-        input[type="number"] { max-width: 100%; }
         button {
             background: #2563eb;
             color: #fff;
@@ -61,6 +61,14 @@
         button:hover { background: #1d4ed8; }
         button:active { background: #1e40af; }
         button:disabled { background: #93c5fd; cursor: not-allowed; }
+        .btn-secondary {
+            background: #059669;
+            margin-bottom: 10px;
+        }
+        .btn-secondary:hover { background: #047857; }
+        .btn-secondary:disabled { background: #6ee7b7; }
+        .btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .btn-row button { margin-top: 0; }
         #status {
             margin-top: 12px;
             padding: 10px 12px;
@@ -76,16 +84,72 @@
             color: #888;
             margin-top: 4px;
         }
+        .connection-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            flex-shrink: 0;
+        }
+        .dot.connected { background: #22c55e; }
+        .connection-bar span { font-size: 0.85rem; color: #555; flex: 1; }
+        .connection-bar button {
+            width: auto;
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            margin: 0;
+        }
+        #printer-list {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 14px;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            display: none;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        #printer-list div { padding: 2px 0; }
+        #printer-list div.clickable {
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 3px;
+        }
+        #printer-list div.clickable:hover { background: #f0f0f0; }
     </style>
 </head>
 <body>
     <h1>Label Printer Test</h1>
 
-    <div class="row">
-        <div class="field">
-            <label for="port">Agent Port</label>
-            <input type="number" id="port" value="9100" min="1" max="65535">
+    <div class="connection-bar">
+        <div class="dot" id="conn-dot"></div>
+        <span id="conn-text">Not connected to QZ Tray</span>
+        <button id="conn-btn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <div id="printer-list"></div>
+
+    <div class="field">
+        <label for="printer">Printer</label>
+        <div class="row">
+            <input type="text" id="printer" placeholder="Click 'Connect' then select a printer">
+            <button style="width:auto; padding:6px 14px; font-size:0.8rem; white-space:nowrap; margin:0; flex-shrink:0;" onclick="listPrinters()">Find Printers</button>
         </div>
+    </div>
+
+    <div class="row">
         <div class="field">
             <label for="format">Format</label>
             <select id="format" onchange="loadTemplate()">
@@ -122,21 +186,8 @@
                 note: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode."
             },
             tpcl: {
-                data: `[ESC]iQ1[LF]
-[ESC]iR1[LF]
-[ESC]iM02[LF]
-[ESC]iS0002[LF]
-[ESC]PC000;0050,0030,2,2,C,00,B
-Lavandula angustifolia[CR][LF]
-[ESC]PC000;0050,0080,2,2,C,00,B
-English Lavender[CR][LF]
-[ESC]PC000;0050,0130,1,1,C,00,B
-Perennial | Full Sun | Zone 5-9[CR][LF]
-[ESC]XS;0050,0170,05,03,01
-https://example.com/plant/123[CR][LF]
-[ESC]Q1[LF]
-[ESC]Z[LF]`,
-                note: "Toshiba Printer Command Language. Native language for the SA4. [ESC]/[LF]/[CR] are auto-converted to real control chars on send."
+                data: `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0050,0030,2,2,C,00,B\nLavandula angustifolia\r\n\x1BPC000;0050,0080,2,2,C,00,B\nEnglish Lavender\r\n\x1BPC000;0050,0130,1,1,C,00,B\nPerennial | Full Sun | Zone 5-9\r\n\x1BXS;0050,0170,05,03,01\nhttps://example.com/plant/123\r\n\x1BQ1\n\x1BZ\n`,
+                note: "Toshiba Printer Command Language. Native language for the SA4. Control characters are embedded directly."
             },
             epl: {
                 data: `N
@@ -161,20 +212,8 @@ PRINT 1`,
                 note: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers."
             },
             escpos: {
-                data: `[ESC]@
-[ESC]a1
-[ESC]!0x30
-Lavandula angustifolia
-[ESC]!0x00
-
-English Lavender
-
-Perennial | Full Sun | Zone 5-9
-
-[GS]k0x31 0x02 0x04
-https://example.com/plant/123
-[GS]V1`,
-                note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it. [ESC]/[GS] are auto-converted on send."
+                data: `\x1B@\x1Ba\x01\x1B!\x30Lavandula angustifolia\n\x1B!\x00\nEnglish Lavender\n\nPerennial | Full Sun | Zone 5-9\n\n\x1DV\x01`,
+                note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it."
             },
             raw: {
                 data: `Lavandula angustifolia
@@ -191,7 +230,6 @@ Perennial | Full Sun | Zone 5-9`,
             document.getElementById("format-note").textContent = t.note;
         }
 
-        // Load initial template
         loadTemplate();
 
         function setStatus(msg, type) {
@@ -200,63 +238,100 @@ Perennial | Full Sun | Zone 5-9`,
             el.className = type;
         }
 
-        // Convert readable placeholders to actual control characters
-        function resolveControlChars(str) {
-            return str
-                .replace(/\[ESC\]/g, "\x1B")
-                .replace(/\[GS\]/g, "\x1D")
-                .replace(/\[FS\]/g, "\x1C")
-                .replace(/\[CR\]/g, "\r")
-                .replace(/\[LF\]/g, "\n")
-                .replace(/\[NUL\]/g, "\x00")
-                .replace(/\[SOH\]/g, "\x01")
-                .replace(/\[STX\]/g, "\x02")
-                .replace(/\[ETX\]/g, "\x03")
-                .replace(/\[EOT\]/g, "\x04")
-                .replace(/\[ENQ\]/g, "\x05")
-                .replace(/\[ACK\]/g, "\x06")
-                .replace(/\[BEL\]/g, "\x07")
-                .replace(/\[BS\]/g, "\x08")
-                .replace(/\[HT\]/g, "\x09")
-                .replace(/\[FF\]/g, "\x0C")
-                .replace(/\[SO\]/g, "\x0E")
-                .replace(/\[SI\]/g, "\x0F")
-                .replace(/\[DLE\]/g, "\x10")
-                .replace(/\[DC1\]/g, "\x11")
-                .replace(/\[DC2\]/g, "\x12")
-                .replace(/\[DC3\]/g, "\x13")
-                .replace(/\[DC4\]/g, "\x14")
-                .replace(/\[CAN\]/g, "\x18")
-                .replace(/\[RS\]/g, "\x1E")
-                .replace(/\[US\]/g, "\x1F");
+        function updateConnectionUI() {
+            const connected = qz.websocket.isActive();
+            document.getElementById("conn-dot").className = connected ? "dot connected" : "dot";
+            document.getElementById("conn-text").textContent = connected ? "Connected to QZ Tray" : "Not connected to QZ Tray";
+            document.getElementById("conn-btn").textContent = connected ? "Disconnect" : "Connect";
+        }
+
+        // Skip certificate validation for unsigned/self-compiled QZ Tray
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            resolve();
+        });
+        qz.security.setSignatureAlgorithm("SHA512");
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                resolve();
+            };
+        });
+
+        async function toggleConnection() {
+            const btn = document.getElementById("conn-btn");
+            btn.disabled = true;
+
+            try {
+                if (qz.websocket.isActive()) {
+                    await qz.websocket.disconnect();
+                    document.getElementById("printer-list").style.display = "none";
+                    setStatus("Disconnected.", "info");
+                } else {
+                    await qz.websocket.connect();
+                    setStatus("Connected to QZ Tray.", "ok");
+                    await listPrinters();
+                }
+            } catch (e) {
+                setStatus("QZ Tray connection failed. Is QZ Tray running? " + e, "err");
+            } finally {
+                btn.disabled = false;
+                updateConnectionUI();
+            }
+        }
+
+        async function listPrinters() {
+            if (!qz.websocket.isActive()) {
+                setStatus("Connect to QZ Tray first.", "err");
+                return;
+            }
+
+            try {
+                const printers = await qz.printers.find();
+                const listEl = document.getElementById("printer-list");
+
+                if (printers.length === 0) {
+                    listEl.innerHTML = "<div>No printers found.</div>";
+                } else {
+                    listEl.innerHTML = printers.map(p =>
+                        `<div class="clickable" onclick="selectPrinter('${p.replace(/'/g, "\\'")}')">${p}</div>`
+                    ).join("");
+                }
+                listEl.style.display = "block";
+            } catch (e) {
+                setStatus("Failed to list printers: " + e, "err");
+            }
+        }
+
+        function selectPrinter(name) {
+            document.getElementById("printer").value = name;
+            document.getElementById("printer-list").style.display = "none";
+            setStatus("Selected: " + name, "ok");
         }
 
         async function sendPrint() {
             const btn = document.getElementById("print-btn");
-            const port = document.getElementById("port").value;
-            const data = resolveControlChars(document.getElementById("data").value);
+            const printerName = document.getElementById("printer").value.trim();
+            const data = document.getElementById("data").value;
+
+            if (!printerName) {
+                setStatus("Select a printer first.", "err");
+                return;
+            }
+
+            if (!qz.websocket.isActive()) {
+                setStatus("Connect to QZ Tray first.", "err");
+                return;
+            }
 
             btn.disabled = true;
             btn.textContent = "Sending...";
-            setStatus("Sending to localhost:" + port + "...", "info");
+            setStatus("Sending to " + printerName + "...", "info");
 
             try {
-                const resp = await fetch(`http://127.0.0.1:${port}`, {
-                    method: "POST",
-                    body: data
-                });
-
-                if (resp.ok) {
-                    setStatus("Sent successfully. Check the printer.", "ok");
-                } else {
-                    const text = await resp.text();
-                    setStatus(`Error ${resp.status}: ${text}`, "err");
-                }
+                const config = qz.configs.create(printerName, { altPrinting: true });
+                await qz.print(config, [data]);
+                setStatus("Sent successfully. Check the printer.", "ok");
             } catch (e) {
-                setStatus(
-                    `Cannot reach localhost:${port}. Is the print agent running?`,
-                    "err"
-                );
+                setStatus("Print failed: " + e, "err");
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Send Test Print";
