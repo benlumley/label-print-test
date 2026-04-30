@@ -348,6 +348,7 @@
     <div class="connection-bar">
         <div class="dot" id="conn-dot"></div>
         <span id="conn-text">Not connected to QZ Tray</span>
+        <button id="probe-btn" style="width:auto;padding:6px 14px;font-size:0.8rem;margin:0;background:#6b7280;" onclick="probePorts()" title="Probe QZ Tray endpoints to diagnose connection issues">Probe</button>
         <button id="conn-btn" onclick="toggleConnection()">Connect</button>
     </div>
 
@@ -439,6 +440,7 @@
             &middot; <code>I005</code> printer selected
             &middot; <code>I006</code> sending
             &middot; <code>I007</code> sent OK
+            &middot; <code>I010</code> probe info
             <br>
             <strong>Errors:</strong>
             <code>E001</code> QZ lib didn&rsquo;t load
@@ -449,6 +451,7 @@
             &middot; <code>E006</code> no printer selected
             &middot; <code>E007</code> not connected
             &middot; <code>E008</code> print rejected by QZ
+            &middot; <code>E010</code> probe failure (port unreachable / handshake closed)
             &middot; <code>E098</code> unhandled promise rejection
             &middot; <code>E099</code> uncaught script error
         </div>
@@ -623,6 +626,85 @@ PRINT 1`;
             document.getElementById("conn-dot").className = connected ? "dot connected" : "dot";
             document.getElementById("conn-text").textContent = connected ? "Connected to QZ Tray" : "Not connected to QZ Tray";
             document.getElementById("conn-btn").textContent = connected ? "Disconnect" : "Connect";
+        }
+
+        function probeWss(url, timeoutMs) {
+            return new Promise(resolve => {
+                let resolved = false;
+                const finish = result => {
+                    if (resolved) return;
+                    resolved = true;
+                    resolve(result);
+                };
+                let ws;
+                try {
+                    ws = new WebSocket(url);
+                } catch (e) {
+                    return finish({ url, status: "construct-failed", detail: describeError(e) });
+                }
+                const timer = setTimeout(() => {
+                    try { ws.close(); } catch (_) {}
+                    finish({ url, status: "timeout" });
+                }, timeoutMs);
+                ws.onopen = () => {
+                    clearTimeout(timer);
+                    try { ws.close(1000); } catch (_) {}
+                    finish({ url, status: "open" });
+                };
+                ws.onclose = ev => {
+                    clearTimeout(timer);
+                    finish({ url, status: "closed", code: ev.code, reason: ev.reason || "" });
+                };
+                ws.onerror = () => { /* close fires after */ };
+            });
+        }
+
+        async function probeHttp(url) {
+            try {
+                const r = await fetch(url, { mode: "no-cors", cache: "no-store" });
+                return { url, status: "reachable", detail: `type=${r.type}` };
+            } catch (e) {
+                return { url, status: "failed", detail: describeError(e) };
+            }
+        }
+
+        async function probePorts() {
+            const btn = document.getElementById("probe-btn");
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = "Probing...";
+
+            log("I010", "Probe started", `origin=${location.origin}`);
+
+            const httpTargets = ["https://localhost:8181", "https://localhost:8282"];
+            for (const url of httpTargets) {
+                const r = await probeHttp(url);
+                if (r.status === "reachable") {
+                    log("I010", `HTTPS ${url}: reachable`, r.detail);
+                } else {
+                    log("E010", `HTTPS ${url}: not reachable`, r.detail);
+                }
+            }
+
+            const wssTargets = ["wss://localhost:8181", "wss://localhost:8282"];
+            for (const url of wssTargets) {
+                const r = await probeWss(url, 4000);
+                if (r.status === "open") {
+                    log("I010", `WSS ${url}: handshake OK`);
+                } else if (r.status === "closed") {
+                    const code = r.code === undefined ? "?" : r.code;
+                    const reason = r.reason || "(empty — browser hides cross-origin reasons)";
+                    log("E010", `WSS ${url}: closed`, `code=${code} reason=${reason}`);
+                } else if (r.status === "timeout") {
+                    log("E010", `WSS ${url}: timeout after 4s`);
+                } else {
+                    log("E010", `WSS ${url}: ${r.status}`, r.detail || "");
+                }
+            }
+
+            log("I010", "Probe complete");
+            btn.textContent = original;
+            btn.disabled = false;
         }
 
         renderLog();
