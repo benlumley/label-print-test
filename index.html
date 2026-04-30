@@ -496,10 +496,13 @@
                     return [
                         `{D0240,1000,0200|}`,
                         `{C|}`,
-                        `{PC001;0030,0020,3,3,C,00,B|}`,
-                        `{PC002;0030,0090,2,2,C,00,B|}`,
-                        `{PC003;0030,0130,2,2,C,00,B|}`,
-                        `{PC004;0030,0165,1,1,C,00,B|}`,
+                        // Y positions in 0.1mm. Bitmap font C ≈ 16 dots tall at scale 1
+                        // (~1.35mm), 32 dots at scale 2 (~2.7mm). Line spacing leaves
+                        // a clear gap below each line.
+                        `{PC001;0030,0010,2,2,C,00,B|}`,
+                        `{PC002;0030,0055,1,1,C,00,B|}`,
+                        `{PC003;0030,0090,1,1,C,00,B|}`,
+                        `{PC004;0030,0125,1,1,C,00,B|}`,
                         `{RC001;${c.title}|}`,
                         `{RC002;${c.subline}|}`,
                         `{RC003;${c.heading}|}`,
