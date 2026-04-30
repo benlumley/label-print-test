@@ -489,18 +489,21 @@
 
 ^XZ`;
                 case "tpcl":
-                    // Toshiba B-SA4T TPCL with brace delimiters {…|}. Per the manual the
-                    // [ESC]D parameter order is PITCH, WIDTH, LENGTH (across-head, feed-dir).
-                    // Coordinates and font sizes are in 0.1mm units. Media here: 100mm wide
-                    // (across head) × 20mm long (feed direction), 4mm gap → pitch 0240,
-                    // width 1000, length 0200. Adjust if your media differs.
+                    // Toshiba B-SA4T TPCL with brace delimiters {…|}. PC defines a bitmap
+                    // text field (position, scale, font, rotation, attribute); RC provides the
+                    // text data keyed by the same sequence number. {D pitch, width, length|}
+                    // in 0.1mm units. Media: 100mm wide × 20mm long landscape.
                     return [
                         `{D0240,1000,0200|}`,
                         `{C|}`,
-                        `{PC001;0030,0020,3,3,C,00,B|${c.title}|}`,
-                        `{PC002;0030,0090,2,2,C,00,B|${c.subline}|}`,
-                        `{PC003;0030,0130,2,2,C,00,B|${c.heading}|}`,
-                        `{PC004;0030,0165,1,1,C,00,B|${c.detail}|}`,
+                        `{PC001;0030,0020,3,3,C,00,B|}`,
+                        `{PC002;0030,0090,2,2,C,00,B|}`,
+                        `{PC003;0030,0130,2,2,C,00,B|}`,
+                        `{PC004;0030,0165,1,1,C,00,B|}`,
+                        `{RC001;${c.title}|}`,
+                        `{RC002;${c.subline}|}`,
+                        `{RC003;${c.heading}|}`,
+                        `{RC004;${c.detail}|}`,
                         `{XS;I,0001,0001|}`,
                         ``
                     ].join("\r\n");
