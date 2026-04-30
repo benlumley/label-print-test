@@ -506,10 +506,10 @@
                         `{RC004;${c.detail}|}`,
                         // XS issue: I = issue, 0001 = qty, 9-char mode mask:
                         // 000 = no cut, 2 = transmissive (gap) sensor, C = batch,
-                        // 3 = 3"/sec, 0 = no ribbon (direct thermal), 0 = rotation,
-                        // 0 = no status response. Change 5th char to 2 if the printer
-                        // is loaded with a ribbon (thermal transfer).
-                        `{XS;I,0001,0002C3000|}`,
+                        // 3 = 3"/sec, 2 = ribbon installed (thermal transfer),
+                        // 0 = rotation, 0 = no status response. Change 5th char to 0
+                        // if the printer is direct thermal (no ribbon).
+                        `{XS;I,0001,0002C3200|}`,
                         ``
                     ].join("\r\n");
                 case "epl":
