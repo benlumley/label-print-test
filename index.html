@@ -229,6 +229,78 @@
             margin-top: -8px;
             margin-bottom: 14px;
         }
+        .diagnostic {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 12px 0;
+            font-size: 0.8rem;
+        }
+        .diagnostic > summary {
+            cursor: pointer;
+            font-weight: 600;
+            padding: 10px 14px;
+            user-select: none;
+            color: #333;
+            list-style: revert;
+        }
+        .diagnostic[open] > summary { border-bottom: 1px solid #eee; }
+        #log-counter { color: #b91c1c; font-weight: 700; }
+        .log-controls {
+            padding: 8px 14px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .log-controls button {
+            width: auto;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            margin: 0;
+            background: #6b7280;
+        }
+        .log-controls button:hover { background: #4b5563; }
+        .log-hint {
+            font-size: 0.72rem;
+            color: #666;
+        }
+        #log-list {
+            max-height: 280px;
+            overflow-y: auto;
+            padding: 6px 0;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.78rem;
+        }
+        .log-entry {
+            padding: 3px 14px;
+            border-left: 3px solid transparent;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .log-E { background: #fef2f2; border-left-color: #dc2626; }
+        .log-I { background: #f0fdf4; border-left-color: #16a34a; }
+        .log-ts { color: #888; margin-right: 6px; }
+        .log-code { font-weight: 700; margin-right: 6px; }
+        .log-E .log-code { color: #b91c1c; }
+        .log-I .log-code { color: #166534; }
+        .log-empty { padding: 14px; color: #888; text-align: center; font-style: italic; }
+        .code-ref {
+            padding: 8px 14px;
+            border-top: 1px solid #eee;
+            font-size: 0.72rem;
+            color: #555;
+            line-height: 1.7;
+        }
+        .code-ref code {
+            font-weight: 700;
+            color: #1a1a1a;
+            background: #f1f5f9;
+            padding: 0 4px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -268,6 +340,9 @@
             <li><strong>Prints garbled characters / command codes as text</strong> &rarr; printer is treating commands as plain text. Wrong format selected, or printer is in the wrong emulation mode.</li>
             <li><strong>Connection drops every print</strong> &rarr; expected on community QZ Tray; the &ldquo;Allow&rdquo; dialog reconfirms each session.</li>
         </ul>
+
+        <h3>Reporting a problem</h3>
+        <p>Every event is logged in the <strong>Diagnostic log</strong> further down the page with a numbered code (e.g. <code>E002</code>). If something goes wrong on the client&rsquo;s machine and you can&rsquo;t copy/paste, just read the codes off &mdash; they&rsquo;re enough to identify the failure. Or hit <strong>Copy to clipboard</strong> if it&rsquo;s available.</p>
     </details>
 
     <div class="connection-bar">
@@ -345,6 +420,39 @@
 
     <button id="print-btn" onclick="sendPrint()">Send Test Print</button>
     <div id="status"></div>
+
+    <details class="diagnostic" id="diag" open>
+        <summary>Diagnostic log<span id="log-counter"></span></summary>
+        <div class="log-controls">
+            <button onclick="copyLog()">Copy to clipboard</button>
+            <button onclick="clearLog()">Clear</button>
+            <span class="log-hint">Read the <strong>code</strong> column to report problems &mdash; e.g. &ldquo;I&rsquo;m seeing E002&rdquo;.</span>
+        </div>
+        <div id="log-list"></div>
+        <div class="code-ref">
+            <strong>Info:</strong>
+            <code>I000</code> page loaded
+            &middot; <code>I001</code> QZ lib loaded
+            &middot; <code>I002</code> connected
+            &middot; <code>I003</code> disconnected
+            &middot; <code>I004</code> printers found
+            &middot; <code>I005</code> printer selected
+            &middot; <code>I006</code> sending
+            &middot; <code>I007</code> sent OK
+            <br>
+            <strong>Errors:</strong>
+            <code>E001</code> QZ lib didn&rsquo;t load
+            &middot; <code>E002</code> connect failed
+            &middot; <code>E003</code> disconnect failed
+            &middot; <code>E004</code> find printers failed
+            &middot; <code>E005</code> no printers found
+            &middot; <code>E006</code> no printer selected
+            &middot; <code>E007</code> not connected
+            &middot; <code>E008</code> print rejected by QZ
+            &middot; <code>E098</code> unhandled promise rejection
+            &middot; <code>E099</code> uncaught script error
+        </div>
+    </details>
 
     <script>
         const formatNotes = {
@@ -428,31 +536,120 @@ PRINT 1`;
 
         regenerate();
 
+        const eventLog = [];
+        const MAX_LOG_ENTRIES = 100;
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+        }
+
+        function describeError(e) {
+            if (!e) return "";
+            if (e instanceof Error) return e.message || String(e);
+            if (typeof e === "object") {
+                try { return e.message || JSON.stringify(e); } catch { return String(e); }
+            }
+            return String(e);
+        }
+
+        function log(code, summary, detail) {
+            const ts = new Date().toTimeString().slice(0, 8);
+            const detailStr = describeError(detail);
+            eventLog.unshift({ ts, code, summary, detail: detailStr });
+            if (eventLog.length > MAX_LOG_ENTRIES) eventLog.length = MAX_LOG_ENTRIES;
+            renderLog();
+            const fn = code.startsWith("E") ? "error" : "log";
+            console[fn](`[${code}] ${summary}${detailStr ? " — " + detailStr : ""}`);
+        }
+
+        function renderLog() {
+            const list = document.getElementById("log-list");
+            const counter = document.getElementById("log-counter");
+            if (!list) return;
+            if (eventLog.length === 0) {
+                list.innerHTML = "<div class=\"log-empty\">No events yet.</div>";
+                if (counter) counter.textContent = "";
+                return;
+            }
+            list.innerHTML = eventLog.map(e => {
+                const klass = "log-" + e.code[0];
+                const detail = e.detail ? " — " + escapeHtml(e.detail) : "";
+                return `<div class="log-entry ${klass}"><span class="log-ts">${e.ts}</span><span class="log-code">${e.code}</span><span class="log-msg">${escapeHtml(e.summary)}${detail}</span></div>`;
+            }).join("");
+            const errCount = eventLog.filter(e => e.code.startsWith("E")).length;
+            if (counter) counter.textContent = errCount > 0 ? ` (${errCount} error${errCount > 1 ? "s" : ""})` : "";
+        }
+
+        function clearLog() {
+            eventLog.length = 0;
+            renderLog();
+        }
+
+        async function copyLog() {
+            const text = eventLog.slice().reverse().map(e =>
+                `${e.ts} ${e.code} ${e.summary}${e.detail ? " — " + e.detail : ""}`
+            ).join("\n");
+            try {
+                await navigator.clipboard.writeText(text || "(log empty)");
+                setStatus("Diagnostic log copied to clipboard.", "ok");
+            } catch (e) {
+                setStatus("Could not copy automatically — take a screenshot of the log.", "err");
+            }
+        }
+
         function setStatus(msg, type) {
             const el = document.getElementById("status");
             el.textContent = msg;
             el.className = type;
         }
 
+        function report(code, summary, detail) {
+            log(code, summary, detail);
+            const type = code.startsWith("E") ? "err" : code.startsWith("I") ? "ok" : "info";
+            const detailStr = describeError(detail);
+            const banner = `[${code}] ${summary}` + (detailStr ? ` — ${detailStr.slice(0, 100)}` : "");
+            setStatus(banner, type);
+        }
+
+        window.addEventListener("error", e => {
+            log("E099", "Uncaught script error", `${e.message} @ ${e.filename || "?"}:${e.lineno || 0}`);
+        });
+        window.addEventListener("unhandledrejection", e => {
+            log("E098", "Unhandled promise rejection", e.reason);
+        });
+
         function updateConnectionUI() {
-            const connected = qz.websocket.isActive();
+            const connected = typeof qz !== "undefined" && qz.websocket.isActive();
             document.getElementById("conn-dot").className = connected ? "dot connected" : "dot";
             document.getElementById("conn-text").textContent = connected ? "Connected to QZ Tray" : "Not connected to QZ Tray";
             document.getElementById("conn-btn").textContent = connected ? "Disconnect" : "Connect";
         }
 
-        // Skip certificate validation for unsigned/self-compiled QZ Tray
-        qz.security.setCertificatePromise(function(resolve, reject) {
-            resolve();
-        });
-        qz.security.setSignatureAlgorithm("SHA512");
-        qz.security.setSignaturePromise(function(toSign) {
-            return function(resolve, reject) {
+        renderLog();
+        log("I000", "Page loaded", `${navigator.userAgent.split(" ").slice(-2).join(" ")} · ${navigator.platform || "?"}`);
+
+        if (typeof qz === "undefined") {
+            report("E001", "QZ Tray library failed to load from CDN");
+        } else {
+            // Skip certificate validation for unsigned/self-compiled QZ Tray
+            qz.security.setCertificatePromise(function(resolve, reject) {
                 resolve();
-            };
-        });
+            });
+            qz.security.setSignatureAlgorithm("SHA512");
+            qz.security.setSignaturePromise(function(toSign) {
+                return function(resolve, reject) {
+                    resolve();
+                };
+            });
+            const v = (qz.api && typeof qz.api.getVersion === "function") ? "" : (qz.version || "loaded");
+            log("I001", "QZ Tray library loaded", v);
+        }
 
         async function toggleConnection() {
+            if (typeof qz === "undefined") {
+                report("E001", "QZ Tray library not available");
+                return;
+            }
             const btn = document.getElementById("conn-btn");
             btn.disabled = true;
 
@@ -460,14 +657,18 @@ PRINT 1`;
                 if (qz.websocket.isActive()) {
                     await qz.websocket.disconnect();
                     document.getElementById("printer-list").style.display = "none";
-                    setStatus("Disconnected.", "info");
+                    report("I003", "Disconnected from QZ Tray");
                 } else {
                     await qz.websocket.connect();
-                    setStatus("Connected to QZ Tray.", "ok");
+                    report("I002", "Connected to QZ Tray");
                     await listPrinters();
                 }
             } catch (e) {
-                setStatus("QZ Tray connection failed. Is QZ Tray running? " + e, "err");
+                if (qz.websocket.isActive()) {
+                    report("E003", "Disconnect failed", e);
+                } else {
+                    report("E002", "Connect failed (is QZ Tray running?)", e);
+                }
             } finally {
                 btn.disabled = false;
                 updateConnectionUI();
@@ -475,8 +676,8 @@ PRINT 1`;
         }
 
         async function listPrinters() {
-            if (!qz.websocket.isActive()) {
-                setStatus("Connect to QZ Tray first.", "err");
+            if (typeof qz === "undefined" || !qz.websocket.isActive()) {
+                report("E007", "Not connected to QZ Tray");
                 return;
             }
 
@@ -486,48 +687,52 @@ PRINT 1`;
 
                 if (printers.length === 0) {
                     listEl.innerHTML = "<div>No printers found.</div>";
+                    listEl.style.display = "block";
+                    report("E005", "No printers found");
                 } else {
                     listEl.innerHTML = printers.map(p =>
-                        `<div class="clickable" onclick="selectPrinter('${p.replace(/'/g, "\\'")}')">${p}</div>`
+                        `<div class="clickable" onclick="selectPrinter('${p.replace(/'/g, "\\'")}')">${escapeHtml(p)}</div>`
                     ).join("");
+                    listEl.style.display = "block";
+                    log("I004", `Found ${printers.length} printer${printers.length > 1 ? "s" : ""}`, printers.join(" | "));
                 }
-                listEl.style.display = "block";
             } catch (e) {
-                setStatus("Failed to list printers: " + e, "err");
+                report("E004", "Failed to list printers", e);
             }
         }
 
         function selectPrinter(name) {
             document.getElementById("printer").value = name;
             document.getElementById("printer-list").style.display = "none";
-            setStatus("Selected: " + name, "ok");
+            report("I005", "Printer selected", name);
         }
 
         async function sendPrint() {
             const btn = document.getElementById("print-btn");
             const printerName = document.getElementById("printer").value.trim();
             const data = document.getElementById("data").value;
+            const format = document.getElementById("format").value;
 
             if (!printerName) {
-                setStatus("Select a printer first.", "err");
+                report("E006", "No printer selected");
                 return;
             }
 
-            if (!qz.websocket.isActive()) {
-                setStatus("Connect to QZ Tray first.", "err");
+            if (typeof qz === "undefined" || !qz.websocket.isActive()) {
+                report("E007", "Not connected to QZ Tray");
                 return;
             }
 
             btn.disabled = true;
             btn.textContent = "Sending...";
-            setStatus("Sending to " + printerName + "...", "info");
+            report("I006", `Sending to ${printerName}`, `format=${format}, ${data.length} bytes`);
 
             try {
                 const config = qz.configs.create(printerName, { altPrinting: true });
                 await qz.print(config, [data]);
-                setStatus("Sent successfully. Check the printer.", "ok");
+                report("I007", "Sent successfully — check the printer");
             } catch (e) {
-                setStatus("Print failed: " + e, "err");
+                report("E008", "Print rejected by QZ Tray", e);
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Send Test Print";
