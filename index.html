@@ -160,6 +160,75 @@
         details.instructions a { color: #2563eb; }
         details.instructions ul { padding-left: 20px; margin: 4px 0; }
         details.instructions ul li { margin-bottom: 2px; }
+        .preview-wrap {
+            margin: 4px 0 14px;
+            display: flex;
+            justify-content: center;
+        }
+        .preview-label {
+            width: 400px;
+            height: 140px;
+            background: #fff;
+            border: 1px solid #ccc;
+            position: relative;
+            font-family: Arial, "Helvetica Neue", sans-serif;
+            color: #000;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        .pl-title {
+            position: absolute;
+            left: 20px;
+            top: 8px;
+            font-size: 22px;
+            font-weight: 600;
+            font-style: italic;
+            line-height: 1;
+            white-space: nowrap;
+            max-width: 370px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pl-sub {
+            position: absolute;
+            left: 20px;
+            top: 44px;
+            font-size: 12px;
+            white-space: nowrap;
+            max-width: 370px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pl-passport {
+            position: absolute;
+            left: 20px;
+            top: 80px;
+            width: 360px;
+            height: 50px;
+            border: 1px solid #000;
+            padding: 4px 8px;
+            box-sizing: border-box;
+            font-size: 10px;
+            line-height: 1.35;
+        }
+        .pl-head {
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 3px;
+        }
+        .pl-detail {
+            font-size: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .preview-caption {
+            font-size: 0.75rem;
+            color: #888;
+            text-align: center;
+            margin-top: -8px;
+            margin-bottom: 14px;
+        }
     </style>
 </head>
 <body>
@@ -217,10 +286,47 @@
         </div>
     </div>
 
+    <div class="field">
+        <label for="content-title">Title (botanical name)</label>
+        <input type="text" id="content-title" value="Anemanthele lessoniana">
+    </div>
+
+    <div class="field">
+        <label for="content-subline">Subline (supplier / qty / location / size)</label>
+        <input type="text" id="content-subline" value="Viriditas Studio   Qty: 6   T1   9 cm">
+    </div>
+
+    <div class="row">
+        <div class="field">
+            <label for="content-heading">Passport heading</label>
+            <input type="text" id="content-heading" value="UK Plant Passport">
+        </div>
+    </div>
+
+    <div class="field">
+        <label for="content-detail">Passport detail (A. name B. botanical code C. batch D. country)</label>
+        <input type="text" id="content-detail" value="A. Anemanthele lessoniana B. 121397 C. 006910 D. GB">
+    </div>
+
+    <div class="field">
+        <label>Preview</label>
+        <div class="preview-wrap">
+            <div class="preview-label">
+                <div class="pl-title" id="pv-title"></div>
+                <div class="pl-sub" id="pv-sub"></div>
+                <div class="pl-passport">
+                    <div class="pl-head" id="pv-head"></div>
+                    <div class="pl-detail" id="pv-detail"></div>
+                </div>
+            </div>
+        </div>
+        <div class="preview-caption">Approximate visual layout &mdash; the printer renders the command data below, not this preview.</div>
+    </div>
+
     <div class="row">
         <div class="field">
             <label for="format">Format</label>
-            <select id="format" onchange="loadTemplate()">
+            <select id="format" onchange="regenerate()">
                 <option value="zpl">ZPL (Zebra)</option>
                 <option value="tpcl" selected>TPCL (Toshiba TEC)</option>
                 <option value="epl">EPL2 (Eltron)</option>
@@ -232,7 +338,7 @@
     </div>
 
     <div class="field">
-        <label for="data">Label Data</label>
+        <label for="data">Label Data <span style="font-weight:400;color:#888;">(auto-generated &mdash; manual edits are kept until you change a content field or format)</span></label>
         <textarea id="data" rows="14"></textarea>
         <div class="format-note" id="format-note"></div>
     </div>
@@ -241,69 +347,86 @@
     <div id="status"></div>
 
     <script>
-        const templates = {
-            zpl: {
-                data: `^XA
-
-^FO20,15^A0N,36,36^FDAnemanthele lessoniana^FS
-^FO20,58^A0N,20,20^FDViriditas Studio   Qty: 6   T1   9 cm^FS
-^FO20,90^GB370,50,1^FS
-^FO25,94^A0N,16,16^FDUK Plant Passport^FS
-^FO25,114^A0N,14,14^FDA. Anemanthele lessoniana B. 121397 C. 006910 D. GB^FS
-
-^XZ`,
-                note: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode."
-            },
-            tpcl: {
-                data: `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0020,0015,2,2,C,00,B\nAnemanthele lessoniana\r\n\x1BPC000;0020,0058,1,1,C,00,B\nViriditas Studio   Qty: 6   T1   9 cm\r\n\x1BLC;0020,0090,0390,0140,1,1\r\n\x1BPC000;0025,0094,1,1,C,00,B\nUK Plant Passport\r\n\x1BPC000;0025,0114,1,1,C,00,B\nA. Anemanthele lessoniana B. 121397 C. 006910 D. GB\r\n\x1BQ1\n\x1BZ\n`,
-                note: "Toshiba Printer Command Language. Native language for the SA4. Control characters are embedded directly."
-            },
-            epl: {
-                data: `N
-q812
-Q1218,24
-A20,15,0,4,1,1,N,"Anemanthele lessoniana"
-A20,58,0,2,1,1,N,"Viriditas Studio   Qty: 6   T1   9 cm"
-X20,90,390,140,1
-A25,94,0,1,1,1,N,"UK Plant Passport"
-A25,114,0,1,1,1,N,"A. Anemanthele lessoniana B. 121397 C. 006910 D. GB"
-P1`,
-                note: "Eltron Programming Language. Used by older Zebra/Eltron printers."
-            },
-            tspl: {
-                data: `SIZE 100 mm, 30 mm
-GAP 3 mm, 0
-CLS
-TEXT 20,15,"4",0,1,1,"Anemanthele lessoniana"
-TEXT 20,58,"2",0,1,1,"Viriditas Studio   Qty: 6   T1   9 cm"
-BOX 20,90,390,140,1
-TEXT 25,94,"1",0,1,1,"UK Plant Passport"
-TEXT 25,114,"1",0,1,1,"A. Anemanthele lessoniana B. 121397 C. 006910 D. GB"
-PRINT 1`,
-                note: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers."
-            },
-            escpos: {
-                data: `\x1B@\x1Ba\x00\x1B!\x30Anemanthele lessoniana\n\x1B!\x00Viriditas Studio   Qty: 6   T1   9 cm\n\n--- UK Plant Passport ---\nA. Anemanthele lessoniana B. 121397 C. 006910 D. GB\n\n\x1DV\x01`,
-                note: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it."
-            },
-            raw: {
-                data: `Anemanthele lessoniana
-Viriditas Studio   Qty: 6   T1   9 cm
-
-UK Plant Passport
-A. Anemanthele lessoniana B. 121397 C. 006910 D. GB`,
-                note: "Plain text. Useful for testing connectivity — printer should print the raw text if it accepts it."
-            }
+        const formatNotes = {
+            zpl: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode.",
+            tpcl: "Toshiba Printer Command Language. Native language for the SA4. Control characters are embedded directly.",
+            epl: "Eltron Programming Language. Used by older Zebra/Eltron printers.",
+            tspl: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers.",
+            escpos: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it.",
+            raw: "Plain text. Useful for testing connectivity — printer should print the raw text if it accepts it."
         };
 
-        function loadTemplate() {
-            const fmt = document.getElementById("format").value;
-            const t = templates[fmt];
-            document.getElementById("data").value = t.data;
-            document.getElementById("format-note").textContent = t.note;
+        function getContent() {
+            return {
+                title: document.getElementById("content-title").value,
+                subline: document.getElementById("content-subline").value,
+                heading: document.getElementById("content-heading").value,
+                detail: document.getElementById("content-detail").value
+            };
         }
 
-        loadTemplate();
+        function buildLabel(format, c) {
+            switch (format) {
+                case "zpl":
+                    return `^XA
+
+^FO20,15^A0N,36,36^FD${c.title}^FS
+^FO20,58^A0N,20,20^FD${c.subline}^FS
+^FO20,90^GB370,50,1^FS
+^FO25,94^A0N,16,16^FD${c.heading}^FS
+^FO25,114^A0N,14,14^FD${c.detail}^FS
+
+^XZ`;
+                case "tpcl":
+                    return `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0020,0015,2,2,C,00,B\n${c.title}\r\n\x1BPC000;0020,0058,1,1,C,00,B\n${c.subline}\r\n\x1BLC;0020,0090,0390,0140,1,1\r\n\x1BPC000;0025,0094,1,1,C,00,B\n${c.heading}\r\n\x1BPC000;0025,0114,1,1,C,00,B\n${c.detail}\r\n\x1BQ1\n\x1BZ\n`;
+                case "epl":
+                    return `N
+q812
+Q1218,24
+A20,15,0,4,1,1,N,"${c.title}"
+A20,58,0,2,1,1,N,"${c.subline}"
+X20,90,390,140,1
+A25,94,0,1,1,1,N,"${c.heading}"
+A25,114,0,1,1,1,N,"${c.detail}"
+P1`;
+                case "tspl":
+                    return `SIZE 100 mm, 30 mm
+GAP 3 mm, 0
+CLS
+TEXT 20,15,"4",0,1,1,"${c.title}"
+TEXT 20,58,"2",0,1,1,"${c.subline}"
+BOX 20,90,390,140,1
+TEXT 25,94,"1",0,1,1,"${c.heading}"
+TEXT 25,114,"1",0,1,1,"${c.detail}"
+PRINT 1`;
+                case "escpos":
+                    return `\x1B@\x1Ba\x00\x1B!\x30${c.title}\n\x1B!\x00${c.subline}\n\n--- ${c.heading} ---\n${c.detail}\n\n\x1DV\x01`;
+                case "raw":
+                default:
+                    return `${c.title}\n${c.subline}\n\n${c.heading}\n${c.detail}`;
+            }
+        }
+
+        function updatePreview(c) {
+            document.getElementById("pv-title").textContent = c.title;
+            document.getElementById("pv-sub").textContent = c.subline;
+            document.getElementById("pv-head").textContent = c.heading;
+            document.getElementById("pv-detail").textContent = c.detail;
+        }
+
+        function regenerate() {
+            const fmt = document.getElementById("format").value;
+            const c = getContent();
+            document.getElementById("data").value = buildLabel(fmt, c);
+            document.getElementById("format-note").textContent = formatNotes[fmt] || "";
+            updatePreview(c);
+        }
+
+        ["content-title", "content-subline", "content-heading", "content-detail"].forEach(id => {
+            document.getElementById(id).addEventListener("input", regenerate);
+        });
+
+        regenerate();
 
         function setStatus(msg, type) {
             const el = document.getElementById("status");
