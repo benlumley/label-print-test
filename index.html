@@ -404,7 +404,7 @@
             <label for="format">Format</label>
             <select id="format" onchange="regenerate()">
                 <option value="zpl">ZPL (Zebra)</option>
-                <option value="tpcl" selected>TPCL (Toshiba TEC)</option>
+                <option value="tpcl" selected>TPCL (Toshiba B-SA4T, 100&times;20mm landscape)</option>
                 <option value="epl">EPL2 (Eltron)</option>
                 <option value="tspl">TSPL (TSC)</option>
                 <option value="escpos">ESC/POS</option>
@@ -460,7 +460,7 @@
     <script>
         const formatNotes = {
             zpl: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode.",
-            tpcl: "Toshiba Printer Command Language. Native language for the SA4. Control characters are embedded directly.",
+            tpcl: "Toshiba B-SA4T TPCL — brace-delimited dialect. Configured for 100mm × 20mm landscape labels at 300dpi (label height 200, pitch 240, print width 1000 in 0.1mm units). Adjust the {D…|} command if your media is different.",
             epl: "Eltron Programming Language. Used by older Zebra/Eltron printers.",
             tspl: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers.",
             escpos: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it.",
@@ -489,7 +489,23 @@
 
 ^XZ`;
                 case "tpcl":
-                    return `\x1BiQ1\n\x1BiR1\n\x1BiM02\n\x1BiS0002\n\x1BPC000;0020,0015,2,2,C,00,B\n${c.title}\r\n\x1BPC000;0020,0058,1,1,C,00,B\n${c.subline}\r\n\x1BLC;0020,0090,0390,0140,1,1\r\n\x1BPC000;0025,0094,1,1,C,00,B\n${c.heading}\r\n\x1BPC000;0025,0114,1,1,C,00,B\n${c.detail}\r\n\x1BQ1\n\x1BZ\n`;
+                    // Toshiba B-SA4T TPCL (brace-delimited). Media: 100mm × 20mm landscape, 300dpi.
+                    // Coordinates and font sizes are in 0.1mm units. {D pitch, height, width|} with
+                    // pitch = label height + gap (240 = 20mm + 4mm). Bitmap font C scaled (1-9).
+                    return [
+                        `{D0240,0200,1000|}`,
+                        `{C|}`,
+                        `{PC001;0030,0010,4,4,C,00,B|${c.title}|}`,
+                        `{PC002;0030,0070,2,2,C,00,B|${c.subline}|}`,
+                        `{LC;0030,0100,0970,0100,1,003|}`,
+                        `{LC;0030,0180,0970,0180,1,003|}`,
+                        `{LC;0030,0100,0030,0180,1,003|}`,
+                        `{LC;0970,0100,0970,0180,1,003|}`,
+                        `{PC003;0050,0110,2,2,C,00,B|${c.heading}|}`,
+                        `{PC004;0050,0150,1,1,C,00,B|${c.detail}|}`,
+                        `{XS;I,0001,0001|}`,
+                        ``
+                    ].join("\r\n");
                 case "epl":
                     return `N
 q812
