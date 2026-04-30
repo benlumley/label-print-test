@@ -128,10 +128,78 @@
             border-radius: 3px;
         }
         #printer-list div.clickable:hover { background: #f0f0f0; }
+        details.instructions {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+        }
+        details.instructions summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #1e40af;
+            user-select: none;
+        }
+        details.instructions[open] summary { margin-bottom: 10px; }
+        details.instructions ol { padding-left: 20px; margin: 6px 0; }
+        details.instructions li { margin-bottom: 6px; line-height: 1.5; }
+        details.instructions code {
+            background: #f1f5f9;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.8rem;
+        }
+        details.instructions h3 {
+            font-size: 0.9rem;
+            margin: 12px 0 4px;
+            color: #1a1a1a;
+        }
+        details.instructions a { color: #2563eb; }
+        details.instructions ul { padding-left: 20px; margin: 4px 0; }
+        details.instructions ul li { margin-bottom: 2px; }
     </style>
 </head>
 <body>
     <h1>Label Printer Test</h1>
+
+    <details class="instructions" open>
+        <summary>How to use this page (read first)</summary>
+
+        <h3>Setup</h3>
+        <ol>
+            <li>Install <a href="https://qz.io/download/" target="_blank" rel="noopener">QZ Tray</a> on the machine the printer is connected to (free, Mac/Win/Linux). Launch it &mdash; you should see its icon in your system tray.</li>
+            <li>The first time you click <strong>Connect</strong>, your browser may block the websocket because QZ Tray uses a self-signed cert on <code>localhost:8181</code>. If that happens, open <a href="https://localhost:8181" target="_blank" rel="noopener">https://localhost:8181</a> in a new tab, accept the certificate warning, then come back and try Connect again.</li>
+            <li>This page does <strong>not</strong> sign requests, so QZ Tray will pop an &ldquo;Allow this site to print?&rdquo; dialog. Click Allow (and tick &ldquo;remember&rdquo; to stop being asked).</li>
+        </ol>
+
+        <h3>Sending a test print</h3>
+        <ol>
+            <li>Click <strong>Connect</strong> &mdash; the dot should turn green.</li>
+            <li>Click <strong>Find Printers</strong> &mdash; click your label printer in the list to select it.</li>
+            <li>Pick the <strong>Format</strong> that matches your printer&rsquo;s command language:
+                <ul>
+                    <li>Zebra &rarr; <strong>ZPL</strong></li>
+                    <li>Toshiba TEC (e.g. SA4) &rarr; <strong>TPCL</strong> (or ZPL if it&rsquo;s in ZPL emulation mode)</li>
+                    <li>Eltron / older Zebra &rarr; <strong>EPL2</strong></li>
+                    <li>TSC / Printronix &rarr; <strong>TSPL</strong></li>
+                    <li>Receipt printers &rarr; <strong>ESC/POS</strong></li>
+                </ul>
+            </li>
+            <li>If you&rsquo;re unsure of the language, try <strong>Raw Text</strong> first &mdash; that confirms the pipe works end-to-end before you fight with command syntax.</li>
+            <li>Hit <strong>Send Test Print</strong>. Status appears below the button.</li>
+        </ol>
+
+        <h3>If it doesn&rsquo;t work</h3>
+        <ul>
+            <li><strong>Connect fails</strong> &rarr; QZ Tray isn&rsquo;t running, or browser is blocking the websocket. Check the tray icon, then visit <code>https://localhost:8181</code> and accept the cert.</li>
+            <li><strong>&ldquo;Sent successfully&rdquo; but nothing prints</strong> &rarr; usually wrong format for the printer, or the driver is mangling raw bytes. Try Raw Text to isolate; if that prints, it&rsquo;s a format mismatch.</li>
+            <li><strong>Prints garbled characters / command codes as text</strong> &rarr; printer is treating commands as plain text. Wrong format selected, or printer is in the wrong emulation mode.</li>
+            <li><strong>Connection drops every print</strong> &rarr; expected on community QZ Tray; the &ldquo;Allow&rdquo; dialog reconfirms each session.</li>
+        </ul>
+    </details>
 
     <div class="connection-bar">
         <div class="dot" id="conn-dot"></div>
