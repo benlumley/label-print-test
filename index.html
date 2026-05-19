@@ -363,6 +363,17 @@
     </div>
 
     <div class="field">
+        <label for="sample">Quick sample (loads preset content)</label>
+        <select id="sample" onchange="loadSample(this.value)">
+            <option value="">&mdash; pick a sample &mdash;</option>
+            <option value="1">Sample 1: Anemanthele lessoniana (grass, 9cm)</option>
+            <option value="2">Sample 2: Lavandula angustifolia 'Hidcote' (herb, 9cm)</option>
+            <option value="3">Sample 3: Salvia nemorosa 'Caradonna' (perennial, 1L)</option>
+            <option value="4">Sample 4: Echinacea purpurea 'White Swan' (perennial, 2L)</option>
+        </select>
+    </div>
+
+    <div class="field">
         <label for="content-title">Title (botanical name)</label>
         <input type="text" id="content-title" value="Anemanthele lessoniana">
     </div>
@@ -386,7 +397,7 @@
 
     <div class="field">
         <label>Preview</label>
-        <div class="preview-wrap">
+        <div class="preview-wrap" id="preview-html">
             <div class="preview-label">
                 <div class="pl-title" id="pv-title"></div>
                 <div class="pl-sub" id="pv-sub"></div>
@@ -396,7 +407,10 @@
                 </div>
             </div>
         </div>
-        <div class="preview-caption">Approximate visual layout &mdash; the printer renders the command data below, not this preview.</div>
+        <div class="preview-wrap" id="preview-raster" style="display:none;">
+            <canvas id="raster-canvas" style="border:1px solid #ccc; background:#fff; max-width:100%; image-rendering:pixelated;"></canvas>
+        </div>
+        <div class="preview-caption" id="preview-caption">Approximate visual layout &mdash; the printer renders the command data below, not this preview.</div>
     </div>
 
     <div class="row">
@@ -404,7 +418,8 @@
             <label for="format">Format</label>
             <select id="format" onchange="regenerate()">
                 <option value="zpl">ZPL (Zebra)</option>
-                <option value="tpcl" selected>TPCL (Toshiba B-SA4T, 100&times;20mm landscape)</option>
+                <option value="tpcl_raster" selected>TPCL raster (Toshiba B-SA4T, production / mirrors GrowMaster {SG|})</option>
+                <option value="tpcl">TPCL bitmap-font (Toshiba B-SA4T, PC+RC test path)</option>
                 <option value="epl">EPL2 (Eltron)</option>
                 <option value="tspl">TSPL (TSC)</option>
                 <option value="escpos">ESC/POS</option>
@@ -460,12 +475,53 @@
     <script>
         const formatNotes = {
             zpl: "Zebra Programming Language. Widely supported, including Toshiba TEC in ZPL emulation mode.",
-            tpcl: "Toshiba B-SA4T TPCL — brace-delimited. D / XS values mirror captured GrowMaster output for the Thermaplas 300 stake (105.7mm × 25.4mm printable, 2mm gap → pitch 27.4mm; ribbon installed; transmissive sensor; 6 in/sec). GrowMaster ships its label content as raster bitmaps via {SG…|}; this POC uses the simpler PC + RC bitmap-font path so we can iterate on text positioning without building a server-side image renderer.",
+            tpcl_raster: "Toshiba B-SA4T TPCL with three raster {SG|} strips — what GrowMaster does and what the Arvensis production implementation will mirror. Title rendered italic serif, subline sans, plant passport block as a boxed sans header + detail. Text rasterised in the browser at 300dpi → 1-bit → packed into SG payload bytes (uncompressed, density 0). Output is binary; the textarea shows the structure with byte-count placeholders for the bitmap data. Shipped to QZ Tray base64-encoded so binary survives the websocket.",
+            tpcl: "Toshiba B-SA4T TPCL — brace-delimited PC + RC bitmap-font path. Smaller payload than raster, but locked to the printer's built-in fonts. Useful for testing printer-side text rendering and validating the basic command pipeline.",
             epl: "Eltron Programming Language. Used by older Zebra/Eltron printers.",
             tspl: "TSC Printer Language. Used by TSC, Printronix, and some compatible printers.",
             escpos: "ESC/POS receipt/label format. Mostly for receipt printers but some label printers support it.",
             raw: "Plain text. Useful for testing connectivity — printer should print the raw text if it accepts it."
         };
+
+        const samples = {
+            "1": {
+                title: "Anemanthele lessoniana",
+                subline: "Viriditas Studio   Qty: 6   T1   9 cm",
+                heading: "UK Plant Passport",
+                detail: "A. Anemanthele lessoniana B. 121397 C. 006910 D. GB"
+            },
+            "2": {
+                title: "Lavandula angustifolia 'Hidcote'",
+                subline: "Viriditas Studio   Qty: 12   T3   9 cm",
+                heading: "UK Plant Passport",
+                detail: "A. Lavandula angustifolia 'Hidcote' B. 121397 C. 006911 D. GB"
+            },
+            "3": {
+                title: "Salvia nemorosa 'Caradonna'",
+                subline: "Viriditas Studio   Qty: 8   T2   1 L",
+                heading: "UK Plant Passport",
+                detail: "A. Salvia nemorosa 'Caradonna' B. 121397 C. 006912 D. GB"
+            },
+            "4": {
+                title: "Echinacea purpurea 'White Swan'",
+                subline: "Viriditas Studio   Qty: 4   T4   2 L",
+                heading: "UK Plant Passport",
+                detail: "A. Echinacea purpurea 'White Swan' B. 121397 C. 006913 D. GB"
+            }
+        };
+
+        function loadSample(key) {
+            if (!key) return;
+            const s = samples[key];
+            document.getElementById("content-title").value = s.title;
+            document.getElementById("content-subline").value = s.subline;
+            document.getElementById("content-heading").value = s.heading;
+            document.getElementById("content-detail").value = s.detail;
+            regenerate();
+        }
+
+        // Holds the binary payload built by the raster path so sendPrint can ship it base64-encoded
+        let lastBinaryPayload = null;
 
         function getContent() {
             return {
@@ -476,8 +532,197 @@
             };
         }
 
+        // === Raster TPCL helpers ============================================
+        // Label geometry (matches GrowMaster captures: {D0274,1057,0254|})
+        const LABEL_DPI = 300;
+        const LABEL_WIDTH_DOTS = 1248;   // 105.7mm at 300dpi
+        const LABEL_HEIGHT_DOTS = 300;   // 25.4mm at 300dpi
+        // Three SG strip Y origins in 0.1mm units (from GrowMaster):
+        const STRIP_Y_TITLE = 53;
+        const STRIP_Y_SUBLINE = 127;
+        const STRIP_Y_PASSPORT = 165;
+        const STRIP_X = 12;              // 1.2mm left margin
+
+        // Convert a 0.1mm position to dots (300dpi).
+        function mmTo10thToDots(mm10) { return Math.round(mm10 / 254 * 300); }
+
+        // Render text into a fresh canvas sized to fit.
+        function renderTextCanvas(text, opts) {
+            const { italic = false, bold = false, serif = false, fontSizePx = 24, padding = 2 } = opts;
+            const style = (italic ? "italic " : "") + (bold ? "bold " : "");
+            const family = serif ? "Georgia, 'Times New Roman', serif" : "Arial, Helvetica, sans-serif";
+            const fontSpec = `${style}${fontSizePx}px ${family}`;
+
+            const measure = document.createElement("canvas").getContext("2d");
+            measure.font = fontSpec;
+            const metrics = measure.measureText(text);
+            const w = Math.max(8, Math.ceil(metrics.width) + padding * 2);
+            const h = Math.ceil(fontSizePx * 1.3) + padding * 2;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = "#000";
+            ctx.font = fontSpec;
+            ctx.textBaseline = "top";
+            ctx.fillText(text, padding, padding);
+            return canvas;
+        }
+
+        // Render the plant passport block (heading + box + detail) into a fresh canvas.
+        function renderPassportCanvas(heading, detail) {
+            // Width sized to comfortably hold typical passport detail at 300dpi
+            const w = 1100;
+            const h = 110;
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, w - 2, h - 2);
+            ctx.fillStyle = "#000";
+            ctx.textBaseline = "top";
+            ctx.font = "bold 24px Arial, Helvetica, sans-serif";
+            ctx.fillText(heading, 12, 10);
+            ctx.font = "20px Arial, Helvetica, sans-serif";
+            ctx.fillText(detail, 12, 50);
+            return canvas;
+        }
+
+        // Pack a canvas to TPCL SG bitmap bytes (1-bit, MSB-first, row-major, width padded to multiple of 8).
+        function canvasToSgBitmap(canvas) {
+            const ctx = canvas.getContext("2d");
+            const w = canvas.width;
+            const h = canvas.height;
+            const padded = (w % 8 === 0) ? w : w + (8 - w % 8);
+            const bytesPerRow = padded / 8;
+            const data = ctx.getImageData(0, 0, w, h).data;
+            const bytes = new Uint8Array(bytesPerRow * h);
+            for (let y = 0; y < h; y++) {
+                for (let bi = 0; bi < bytesPerRow; bi++) {
+                    let b = 0;
+                    for (let bit = 0; bit < 8; bit++) {
+                        const x = bi * 8 + bit;
+                        if (x >= w) continue; // pad pixels stay 0 (white)
+                        const off = (y * w + x) * 4;
+                        const luma = data[off] + data[off + 1] + data[off + 2];
+                        if (luma < 384) b |= (1 << (7 - bit));
+                    }
+                    bytes[y * bytesPerRow + bi] = b;
+                }
+            }
+            return { bytes, paddedWidth: padded, height: h };
+        }
+
+        // Build one {SG;...|} command as Uint8Array bytes + a display line for the textarea.
+        function buildSgCommand(canvas, x10mm, y10mm) {
+            const { bytes, paddedWidth, height } = canvasToSgBitmap(canvas);
+            const enc = new TextEncoder();
+            const pad4 = n => String(n).padStart(4, "0");
+            const header = `{SG;${pad4(x10mm)},${pad4(y10mm)},${pad4(paddedWidth)},${pad4(height)},0,`;
+            const footer = "|}\r\n";
+            const head = enc.encode(header);
+            const foot = enc.encode(footer);
+            const total = new Uint8Array(head.length + bytes.length + foot.length);
+            total.set(head, 0);
+            total.set(bytes, head.length);
+            total.set(foot, head.length + bytes.length);
+            return {
+                bytes: total,
+                displayLine: `${header}<${bytes.length} bytes of 1-bit bitmap, ${paddedWidth}×${height} dots>|}`,
+                imageW: paddedWidth,
+                imageH: height,
+                payloadSize: bytes.length
+            };
+        }
+
+        // Concatenate Uint8Arrays into a single Uint8Array.
+        function concatBytes(arrs) {
+            const total = arrs.reduce((s, a) => s + a.length, 0);
+            const out = new Uint8Array(total);
+            let off = 0;
+            for (const a of arrs) { out.set(a, off); off += a.length; }
+            return out;
+        }
+
+        // Build the full raster TPCL byte stream + a structural display string.
+        function buildTpclRaster(c) {
+            const titleCanvas    = renderTextCanvas(c.title,    { italic: true,  serif: true,  fontSizePx: 56 });
+            const sublineCanvas  = renderTextCanvas(c.subline,  { italic: false, serif: false, fontSizePx: 26 });
+            const passportCanvas = renderPassportCanvas(c.heading, c.detail);
+
+            const sg1 = buildSgCommand(titleCanvas,    STRIP_X, STRIP_Y_TITLE);
+            const sg2 = buildSgCommand(sublineCanvas,  STRIP_X, STRIP_Y_SUBLINE);
+            const sg3 = buildSgCommand(passportCanvas, STRIP_X, STRIP_Y_PASSPORT);
+
+            const enc = new TextEncoder();
+            const head = enc.encode("{D0274,1057,0254|}\r\n{C|}\r\n");
+            const tail = enc.encode("{XS;I,0001,0002C6200|}\r\n");
+            const payload = concatBytes([head, sg1.bytes, sg2.bytes, sg3.bytes, tail]);
+
+            const display = [
+                "{D0274,1057,0254|}",
+                "{C|}",
+                sg1.displayLine,
+                sg2.displayLine,
+                sg3.displayLine,
+                "{XS;I,0001,0002C6200|}",
+                "",
+                `// Total payload: ${payload.length} bytes (will be base64-encoded for QZ Tray)`,
+                `// Strip 1 (title, italic serif): ${sg1.imageW}×${sg1.imageH} dots, ${sg1.payloadSize} bitmap bytes`,
+                `// Strip 2 (subline, sans):       ${sg2.imageW}×${sg2.imageH} dots, ${sg2.payloadSize} bitmap bytes`,
+                `// Strip 3 (passport block, box): ${sg3.imageW}×${sg3.imageH} dots, ${sg3.payloadSize} bitmap bytes`,
+                "",
+                "// Compositing each strip onto the label canvas at its Y origin (0.1mm units):",
+                `//   strip 1 at Y=${STRIP_Y_TITLE}    → ~${mmTo10thToDots(STRIP_Y_TITLE)} dots from top`,
+                `//   strip 2 at Y=${STRIP_Y_SUBLINE}   → ~${mmTo10thToDots(STRIP_Y_SUBLINE)} dots from top`,
+                `//   strip 3 at Y=${STRIP_Y_PASSPORT}   → ~${mmTo10thToDots(STRIP_Y_PASSPORT)} dots from top`
+            ].join("\r\n");
+
+            return { displayText: display, payload, canvases: { title: titleCanvas, subline: sublineCanvas, passport: passportCanvas } };
+        }
+
+        // Composite three strips onto a label-sized canvas for visual preview.
+        function compositeLabelPreview(canvases) {
+            const labelCanvas = document.getElementById("raster-canvas");
+            labelCanvas.width = LABEL_WIDTH_DOTS;
+            labelCanvas.height = LABEL_HEIGHT_DOTS;
+            const ctx = labelCanvas.getContext("2d");
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, LABEL_WIDTH_DOTS, LABEL_HEIGHT_DOTS);
+            ctx.drawImage(canvases.title,    mmTo10thToDots(STRIP_X), mmTo10thToDots(STRIP_Y_TITLE));
+            ctx.drawImage(canvases.subline,  mmTo10thToDots(STRIP_X), mmTo10thToDots(STRIP_Y_SUBLINE));
+            ctx.drawImage(canvases.passport, mmTo10thToDots(STRIP_X), mmTo10thToDots(STRIP_Y_PASSPORT));
+        }
+
+        // Convert Uint8Array → base64 (chunked to avoid call-stack issues on long arrays).
+        function uint8ToBase64(arr) {
+            let s = "";
+            const chunk = 8192;
+            for (let i = 0; i < arr.length; i += chunk) {
+                s += String.fromCharCode.apply(null, arr.subarray(i, i + chunk));
+            }
+            return btoa(s);
+        }
+        // === end raster helpers =============================================
+
         function buildLabel(format, c) {
+            // Default: clear any binary payload so non-raster formats ship the textarea string as-is
+            lastBinaryPayload = null;
             switch (format) {
+                case "tpcl_raster": {
+                    const result = buildTpclRaster(c);
+                    lastBinaryPayload = result.payload;
+                    // Stash canvases for preview compositing (read in updatePreview)
+                    window.__lastRasterCanvases = result.canvases;
+                    return result.displayText;
+                }
                 case "zpl":
                     return `^XA
 
@@ -537,11 +782,24 @@ PRINT 1`;
             }
         }
 
-        function updatePreview(c) {
-            document.getElementById("pv-title").textContent = c.title;
-            document.getElementById("pv-sub").textContent = c.subline;
-            document.getElementById("pv-head").textContent = c.heading;
-            document.getElementById("pv-detail").textContent = c.detail;
+        function updatePreview(c, format) {
+            const htmlPane = document.getElementById("preview-html");
+            const rasterPane = document.getElementById("preview-raster");
+            const caption = document.getElementById("preview-caption");
+            if (format === "tpcl_raster" && window.__lastRasterCanvases) {
+                htmlPane.style.display = "none";
+                rasterPane.style.display = "flex";
+                compositeLabelPreview(window.__lastRasterCanvases);
+                caption.textContent = "WYSIWYG raster preview — this is the exact 1248×300-dot bitmap the printer will rasterise from the {SG|} payload below.";
+            } else {
+                htmlPane.style.display = "flex";
+                rasterPane.style.display = "none";
+                document.getElementById("pv-title").textContent = c.title;
+                document.getElementById("pv-sub").textContent = c.subline;
+                document.getElementById("pv-head").textContent = c.heading;
+                document.getElementById("pv-detail").textContent = c.detail;
+                caption.textContent = "Approximate visual layout — the printer renders the command data below, not this preview.";
+            }
         }
 
         function regenerate() {
@@ -549,7 +807,7 @@ PRINT 1`;
             const c = getContent();
             document.getElementById("data").value = buildLabel(fmt, c);
             document.getElementById("format-note").textContent = formatNotes[fmt] || "";
-            updatePreview(c);
+            updatePreview(c, fmt);
         }
 
         ["content-title", "content-subline", "content-heading", "content-detail"].forEach(id => {
@@ -811,7 +1069,6 @@ PRINT 1`;
         async function sendPrint() {
             const btn = document.getElementById("print-btn");
             const printerName = document.getElementById("printer").value.trim();
-            const data = document.getElementById("data").value;
             const format = document.getElementById("format").value;
 
             if (!printerName) {
@@ -824,13 +1081,28 @@ PRINT 1`;
                 return;
             }
 
+            // Pick payload + flavor: raster path ships binary bytes base64-encoded; everything
+            // else ships the textarea string as plain.
+            let printData, byteCount, flavor;
+            if (lastBinaryPayload && lastBinaryPayload.length > 0) {
+                const b64 = uint8ToBase64(lastBinaryPayload);
+                printData = [{ type: "raw", format: "command", flavor: "base64", data: b64 }];
+                byteCount = lastBinaryPayload.length;
+                flavor = "base64";
+            } else {
+                const data = document.getElementById("data").value;
+                printData = [{ type: "raw", format: "command", flavor: "plain", data }];
+                byteCount = data.length;
+                flavor = "plain";
+            }
+
             btn.disabled = true;
             btn.textContent = "Sending...";
-            report("I006", `Sending to ${printerName}`, `format=${format}, ${data.length} bytes`);
+            report("I006", `Sending to ${printerName}`, `format=${format}, flavor=${flavor}, ${byteCount} bytes`);
 
             try {
                 const config = qz.configs.create(printerName, { altPrinting: true });
-                await qz.print(config, [data]);
+                await qz.print(config, printData);
                 report("I007", "Sent successfully — check the printer");
             } catch (e) {
                 report("E008", "Print rejected by QZ Tray", e);
