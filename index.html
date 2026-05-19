@@ -626,7 +626,10 @@
             const { bytes, paddedWidth, height } = canvasToSgBitmap(canvas);
             const enc = new TextEncoder();
             const pad4 = n => String(n).padStart(4, "0");
-            const header = `{SG;${pad4(x10mm)},${pad4(y10mm)},${pad4(paddedWidth)},${pad4(height)},0,`;
+            // K=1 = Hex mode (8 dots/byte, overwrite drawing). Don't use K=0 — that's
+            // Nibble mode (4 dots/byte) which expects half the dots per byte and will
+            // throw a parameter error on the B-SA4T when given our 8-bit-packed data.
+            const header = `{SG;${pad4(x10mm)},${pad4(y10mm)},${pad4(paddedWidth)},${pad4(height)},1,`;
             const footer = "|}\r\n";
             const head = enc.encode(header);
             const foot = enc.encode(footer);
