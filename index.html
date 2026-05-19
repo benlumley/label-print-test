@@ -574,8 +574,9 @@
 
         // Render the plant passport block (heading + box + detail) into a fresh canvas.
         function renderPassportCanvas(heading, detail) {
-            // Width sized to comfortably hold typical passport detail at 300dpi
-            const w = 1100;
+            // Width fixed at 856 dots to match GrowMaster's captured strip 3 NX.
+            // All 8 reference captures had {SG;0010,0165,0856,…|} for this strip.
+            const w = 856;
             const h = 110;
             const canvas = document.createElement("canvas");
             canvas.width = w;
